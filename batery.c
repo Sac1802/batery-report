@@ -1,29 +1,25 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <ncurses.h>
+#include <stdbool.h>
 
-#define RUTA_CAPACITY "/sys/class/power_supply/BAT0/capacity"
-#define RUTA_STATUS "/sys/class/power_supply/BAT0/status"
-#define RUTA_POWER_NOW "/sys/class/power_supply/BAT0/power_now"
-#define RUTA_VOLTAGE_NOW "/sys/class/power_supply/BAT0/voltage_now"
-#define RUTA_ENERGY_FULL "/sys/class/power_supply/BAT0/energy_full"
-#define RUTA_ENERGY_FULL_DESIGN "/sys/class/power_supply/BAT0/energy_full_design"
-#define RUTA_CYCLE_COUNT "/sys/class/power_supply/BAT0/cycle_count"
-#define RUTA_UPTIME "/proc/uptime"
-
-
-long read_number_value(const char *rute) {
+long read_number_value(const char *rute)
+{
     FILE *file = fopen(rute, "r");
-    if (file == NULL) {
+    if (file == NULL)
+    {
         perror("Not Open File");
         return -1;
     }
 
     long value;
-    if (fscanf(file, "%ld", &value) != 1) {
+    if (fscanf(file, "%ld", &value) != 1)
+    {
         perror("Error read file");
         fclose(file);
         return -1;
@@ -33,104 +29,116 @@ long read_number_value(const char *rute) {
     return value;
 }
 
-
-void display_battery_status() {
-    FILE *file = fopen(RUTA_STATUS, "r");
-    if (file == NULL) {
+char *read_string_values(const char *route)
+{
+    FILE *file = fopen(route, "r");
+    if (file == NULL)
+    {
         perror("Not Open File");
-        return;
+        return NULL;
     }
 
-    char status[256];
-    if (fgets(status, sizeof(status), file) != NULL) {
-        printf("Battery Status: %s", status);
-    } else {
-        perror("Error read status");
-    }
-
-    fclose(file);
-}
-
-
-void display_battery_health() {
-    long energy_full = read_number_value(RUTA_ENERGY_FULL);
-    long energy_design = read_number_value(RUTA_ENERGY_FULL_DESIGN);
-    long cycle_count = read_number_value(RUTA_CYCLE_COUNT);
-
-    if (energy_full == -1 || energy_design == -1 || cycle_count == -1) {
-        return;
-    }
-
-    double health = ((double)energy_full / energy_design) * 100;
-    printf("Battery Health: %.2f%%\n", health);
-    printf("Full Charge: %ld mAh\n", energy_full / 1000);
-    printf("Design Capacity: %ld mAh\n", energy_design / 1000);
-    printf("Cycle Count: %ld\n", cycle_count);
-}
-
-
-void display_battery_metrics() {
-    long power_now = read_number_value(RUTA_POWER_NOW);
-    long voltage_now = read_number_value(RUTA_VOLTAGE_NOW);
-
-    if (power_now == -1 || voltage_now == -1) {
-        return;
-    }
-
-    double voltage = (double)voltage_now / 1e6;
-    double power = (double)power_now / 1e6;
-    double current = power / voltage;
-    double energy_per_minute = power / 60.0;
-
-    printf("Voltage: %.2f V\n", voltage);
-    printf("Power Consumption: %.2f W\n", power);
-    printf("Current Draw: %.2f A\n", current);
-    printf("Energy Consumption (per minute): %.6f Wh\n", energy_per_minute);
-    printf("----------------------------------------\n");
-}
-
-void display_uptime() {
-    FILE *file = fopen(RUTA_UPTIME, "r");
-    if (file == NULL) {
-        perror("Not Open Uptime File");
-        return;
-    }
-
-    double uptime_seconds;
-    if (fscanf(file, "%lf", &uptime_seconds) != 1) {
-        perror("Error read uptime");
+    char buffer[256];
+    if (fgets(buffer, sizeof(buffer), file) == NULL)
+    {
+        perror("Error read file");
         fclose(file);
-        return;
+        return NULL;
     }
-
     fclose(file);
 
-    int hours = (int)(uptime_seconds / 3600);
-    int minutes = (int)((uptime_seconds - (hours * 3600)) / 60);
-    int seconds = (int)(uptime_seconds - (hours * 3600) - (minutes * 60));
+    char *result = malloc(strlen(buffer) + 1);
+    if (result == NULL)
+    {
+        perror("malloc failed");
+        return NULL;
+    }
 
-    printf("System Uptime: %02d:%02d:%02d (HH:MM:SS)\n", hours, minutes, seconds);
+    strcpy(result, buffer);
+    return result;
 }
 
-int main() {
+double *read_values_two(const char *rute)
+{
+}
 
-    while (1) {
-        system("clear");
-        printf("Real-time Battery Monitoring. Press Ctrl+C to exit.\n");
-        printf("+---------------------------------------------------+\n");
-        printf("|               Power consumption                   |\n");
-        printf("+---------------------------------------------------+\n");
-        printf("=== Battery Metrics ===\n");
+double *get_values_num(void)
+{
+    const char *routes[] = {
+        "/sys/class/power_supply/BAT0/capacity",
+        "/sys/class/power_supply/BAT0/power_now",
+        "/sys/class/power_supply/BAT0/voltage_now",
+        "/sys/class/power_supply/BAT0/energy_full",
+        "/sys/class/power_supply/BAT0/energy_full_design",
+        "/sys/class/power_supply/BAT0/cycle_count",
+        "/sys/class/power_supply/BAT0/energy_now",
+        "/sys/class/power_supply/BAT0/charge_full",
+        "/sys/class/power_supply/BAT0/voltage_min_design"};
 
-        display_uptime();
-        display_battery_status();
-        display_battery_health();
-        display_battery_metrics();
+    size_t leng = sizeof(routes) / sizeof(routes[0]);
 
-        sleep(1);
+    double *values_read = malloc(sizeof(double) * leng);
+    if (!values_read)
+    {
+        perror("malloc failed");
+        return NULL;
     }
+    for (size_t i = 0; i < leng; i++)
+    {
+        if (access(routes[i], F_OK) != 0)
+        {
+            values_read[i] = 0.0;
+            continue;
+        }
+
+        long value = read_number_value(routes[i]);
+        if (value == -1)
+        {
+            values_read[i] = 0.0;
+        }
+        else
+        {
+            values_read[i] = (double)value;
+        }
+    }
+    return values_read;
+}
+
+char **get_values_string(void)
+{
+    const char *routes[] = {
+        "/sys/class/power_supply/BAT0/status",
+        "/sys/class/power_supply/BAT0/model_name",
+        "/sys/class/power_supply/BAT0/health",
+        "/sys/class/power_supply/BAT0/temp"};
+
+    size_t lengt = strlen(routes);
+    char **values_return[] = malloc(sizeof(char *) * lengt);
+
+    for (size_t i = 0; i < lengt; i++)
+    {
+        char *value = read_string_values(routes[i]);
+        if (value == NULL)
+        {
+            values_return[i] = strdup("Error");
+        }
+        else
+        {
+            values_return[i] = value;
+        }
+    }
+    return values_return;
+}
+
+double *get_values_double(void)
+{
+    // "/proc/uptime",
+}
+
+int main()
+{
+
+    get_values();
 
     return 0;
 }
-
-
