@@ -11,7 +11,7 @@ sha256sums=('SKIP' 'SKIP')
 
 build() {
   cd "$srcdir"
-  gcc -o batery-report batery.c
+  gcc -o batery-report batery.c -lncurses
 }
 
 package() {
